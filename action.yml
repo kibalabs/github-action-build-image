@@ -1,0 +1,110 @@
+name: 'Build Image'
+description: 'Build a docker image with a shared BuildKit when the runner has one, or the GitHub Actions cache otherwise'
+branding:
+  icon: 'package'
+  color: 'blue'
+author: 'Kiba Labs'
+inputs:
+  image:
+    description: 'Name of the image these layers belong to, e.g. api. Used as the GitHub Actions cache scope and as the image name in the BuildKit registry. Use the same image for builds of the same Dockerfile and build args, and a different one when either changes.'
+    required: true
+  context:
+    description: 'Build context'
+    required: true
+  file:
+    description: 'Path to the Dockerfile. Defaults to Dockerfile in the context.'
+    required: false
+    default: ''
+  target:
+    description: 'Build target'
+    required: false
+    default: ''
+  build-args:
+    description: 'Build args, one per line'
+    required: false
+    default: ''
+  tag:
+    description: 'Make the built image available to the local docker daemon under this tag'
+    required: false
+    default: ''
+  push:
+    description: 'Tags to push the built image to, one per line. Log in to the registry first.'
+    required: false
+    default: ''
+outputs:
+  digest:
+    description: 'Digest of the built image, when it is tagged or pushed'
+    value: ${{ steps.build.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - name: Choose how to build
+      id: resolve
+      if: env.CHECKS_ALREADY_PASSED != 'true'
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        TAG: ${{ inputs.tag }}
+        PUSH: ${{ inputs.push }}
+      run: |
+        if [[ -n "$TAG" && -n "$PUSH" ]]; then
+          echo "::error::Set tag or push, not both"
+          exit 1
+        fi
+        endpoint="${BUILDKIT_ENDPOINT:-}"
+        outputs=''
+        if [[ -z "$TAG" && -z "$PUSH" ]]; then
+          outputs='type=cacheonly'
+        elif [[ -n "$TAG" && -n "$endpoint" ]]; then
+          if [[ -z "${BUILDKIT_REGISTRY:-}" ]]; then
+            echo "::error::BUILDKIT_REGISTRY must be set with BUILDKIT_ENDPOINT to tag images"
+            exit 1
+          fi
+          registryImage="$(echo "$BUILDKIT_REGISTRY/$GITHUB_REPOSITORY/$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          outputs="type=image,name=$registryImage:latest,push=true,compression=uncompressed,force-compression=true"
+          echo "registry-image=$registryImage" >> "$GITHUB_OUTPUT"
+        fi
+        echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
+        echo "outputs=$outputs" >> "$GITHUB_OUTPUT"
+    - name: Set up Docker Buildx
+      id: buildx
+      if: env.CHECKS_ALREADY_PASSED != 'true' && env.BUILD_IMAGE_BUILDER == ''
+      uses: docker/setup-buildx-action@v4
+      with:
+        driver: ${{ steps.resolve.outputs.endpoint != '' && 'remote' || 'docker-container' }}
+        endpoint: ${{ steps.resolve.outputs.endpoint }}
+    # NOTE(krishan711): later builds in the job reuse this builder so they share its local state instead of starting a new one
+    - name: Remember the builder
+      if: env.CHECKS_ALREADY_PASSED != 'true' && env.BUILD_IMAGE_BUILDER == ''
+      shell: bash
+      env:
+        BUILDER: ${{ steps.buildx.outputs.name }}
+      run: echo "BUILD_IMAGE_BUILDER=$BUILDER" >> "$GITHUB_ENV"
+    - name: Build image
+      id: build
+      if: env.CHECKS_ALREADY_PASSED != 'true'
+      uses: docker/build-push-action@v7
+      env:
+        DOCKER_BUILD_SUMMARY: 'false'
+        DOCKER_BUILD_RECORD_UPLOAD: 'false'
+      with:
+        builder: ${{ env.BUILD_IMAGE_BUILDER }}
+        context: ${{ inputs.context }}
+        file: ${{ inputs.file }}
+        target: ${{ inputs.target }}
+        build-args: ${{ inputs.build-args }}
+        outputs: ${{ steps.resolve.outputs.outputs }}
+        load: ${{ steps.resolve.outputs.endpoint == '' && inputs.tag != '' }}
+        push: ${{ inputs.push != '' }}
+        tags: ${{ inputs.push != '' && inputs.push || (steps.resolve.outputs.endpoint == '' && inputs.tag || '') }}
+        cache-from: ${{ steps.resolve.outputs.endpoint == '' && format('type=gha,scope={0}', inputs.image) || '' }}
+        cache-to: ${{ steps.resolve.outputs.endpoint == '' && format('type=gha,mode=max,scope={0}', inputs.image) || '' }}
+    - name: Pull image
+      if: env.CHECKS_ALREADY_PASSED != 'true' && steps.resolve.outputs.registry-image != ''
+      shell: bash
+      env:
+        IMAGE: ${{ steps.resolve.outputs.registry-image }}@${{ steps.build.outputs.digest }}
+        TAG: ${{ inputs.tag }}
+      run: |
+        docker pull --quiet "$IMAGE"
+        docker tag "$IMAGE" "$TAG"
