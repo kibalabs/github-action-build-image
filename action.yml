@@ -58,12 +58,16 @@ runs:
         IMAGE: ${{ inputs.image }}
         TAG: ${{ inputs.tag }}
         PUSH: ${{ inputs.push }}
+        RUNNER_ENVIRONMENT: ${{ runner.environment }}
       run: |
         if [[ -n "$TAG" && -n "$PUSH" ]]; then
           echo "::error::Set tag or push, not both"
           exit 1
         fi
         endpoint="${BUILDKIT_ENDPOINT:-}"
+        if [[ -z "$endpoint" && "$RUNNER_ENVIRONMENT" == 'self-hosted' && -z "${BUILD_IMAGE_BUILDER:-}" ]]; then
+          echo "::notice title=Building without a shared BuildKit::BUILDKIT_ENDPOINT is not set on this self-hosted runner, so images build with the GitHub Actions cache. Set it in the runner's environment to build on a shared BuildKit."
+        fi
         outputs=''
         if [[ -z "$TAG" && -z "$PUSH" ]]; then
           outputs='type=cacheonly'
