@@ -58,9 +58,30 @@ The runner decides, through environment variables, so the same workflow works on
 - `BUILDKIT_ENDPOINT` set (e.g. `tcp://buildkit:1234`): builds on that BuildKit with the `remote` driver, which keeps its own cache. Images built with `tag` are pushed uncompressed to `BUILDKIT_REGISTRY` (e.g. `buildkit:5000`), a registry the BuildKit and the runner's docker daemon can both reach, and pulled from there instead of being loaded.
 - `BUILDKIT_ENDPOINT` not set (e.g. on GitHub's runners): builds in a `docker-container` builder with the GitHub Actions cache (`type=gha`, `cache-mode` defaults to `max`) scoped to `image`. Pass `driver-opts: network=host` if the build pushes to a registry on the runner's `localhost`, e.g. a service container.
 
-Set them in the runner's environment (e.g. its `.env` file, or the runner container's environment), not in workflows, so jobs that fall back to GitHub's runners don't get them.
+Set them in the runner's environment, not in workflows, so jobs that fall back to GitHub's runners don't get them. See [Setting up a self-hosted runner](#setting-up-a-self-hosted-runner).
 
 Every build in a job reuses the builder of the first one, so a later build starts with the layers of earlier ones.
+
+### Setting up a self-hosted runner
+
+1. Run a BuildKit the runner can reach, e.g. `moby/buildkit` started with `--addr tcp://0.0.0.0:1234`. It keeps the layer cache, so share one long-lived BuildKit between your runners.
+2. Run a registry that both the BuildKit and the runner's docker daemon can reach, e.g. `registry:3` on port 5000. Images built with `tag` go through it. If it uses plain HTTP, allow that on both sides:
+   - in BuildKit's `buildkitd.toml`:
+     ```toml
+     [registry."buildkit:5000"]
+       http = true
+     ```
+   - in the runner's `/etc/docker/daemon.json`: `{"insecure-registries": ["buildkit:5000"]}`
+3. Set both variables in the runner's `.env` file, in the runner's directory next to `run.sh`. The runner reads it when it starts and passes it to every job:
+   ```
+   BUILDKIT_ENDPOINT=tcp://buildkit:1234
+   BUILDKIT_REGISTRY=buildkit:5000
+   ```
+   `BUILDKIT_REGISTRY` is required with `BUILDKIT_ENDPOINT` for builds with `tag`; those fail without it.
+
+With `push`, the BuildKit pushes straight to the target registry with the runner's `docker login` credentials, so it needs to reach that registry too.
+
+A self-hosted runner without `BUILDKIT_ENDPOINT` still works, with the GitHub Actions cache, and the action adds a notice to the run saying so.
 
 ### Choosing `image`
 
