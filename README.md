@@ -56,7 +56,7 @@ Set at most one of `tag` and `push`:
 The runner decides, through environment variables, so the same workflow works on any runner:
 
 - `BUILDKIT_ENDPOINT` set (e.g. `tcp://buildkit:1234`): builds on that BuildKit with the `remote` driver, which keeps its own cache. Images built with `tag` are pushed uncompressed to `BUILDKIT_REGISTRY` (e.g. `buildkit:5000`), a registry the BuildKit and the runner's docker daemon can both reach, and pulled from there instead of being loaded.
-- `BUILDKIT_ENDPOINT` not set (e.g. on GitHub's runners): builds in a `docker-container` builder, with the GitHub Actions cache (`type=gha,mode=max`) scoped to `image`.
+- `BUILDKIT_ENDPOINT` not set (e.g. on GitHub's runners): builds in a `docker-container` builder on the host network (so it can push to registries on `localhost`), with the GitHub Actions cache (`type=gha,mode=max`) scoped to `image`.
 
 Set them in the runner's environment (e.g. its `.env` file, or the runner container's environment), not in workflows, so jobs that fall back to GitHub's runners don't get them.
 

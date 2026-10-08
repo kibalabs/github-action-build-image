@@ -66,12 +66,14 @@ runs:
         fi
         echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
         echo "outputs=$outputs" >> "$GITHUB_OUTPUT"
+    # NOTE(krishan711): host network lets the docker-container builder reach registries on the runner's localhost, e.g. service containers
     - name: Set up Docker Buildx
       id: buildx
       if: env.CHECKS_ALREADY_PASSED != 'true' && env.BUILD_IMAGE_BUILDER == ''
       uses: docker/setup-buildx-action@v4
       with:
         driver: ${{ steps.resolve.outputs.endpoint != '' && 'remote' || 'docker-container' }}
+        driver-opts: ${{ steps.resolve.outputs.endpoint == '' && 'network=host' || '' }}
         endpoint: ${{ steps.resolve.outputs.endpoint }}
     # NOTE(krishan711): later builds in the job reuse this builder so they share its local state instead of starting a new one
     - name: Remember the builder
