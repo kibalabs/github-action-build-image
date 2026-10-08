@@ -31,6 +31,18 @@ inputs:
     description: 'Tags to push the built image to, one per line. Log in to the registry first.'
     required: false
     default: ''
+  cache-mode:
+    description: 'GitHub Actions cache mode when building without a shared BuildKit: max caches every stage, min only the layers of the final image (smaller, but intermediate stages rebuild)'
+    required: false
+    default: 'max'
+  driver-opts:
+    description: 'Options for the docker-container builder used without a shared BuildKit, one per line, e.g. network=host to reach registries on the runner''s localhost. The builder is created by the first build in the job, so set it there.'
+    required: false
+    default: ''
+  summary:
+    description: 'Add the build summary to the job summary and upload the build record as an artifact'
+    required: false
+    default: 'false'
 outputs:
   digest:
     description: 'Digest of the built image, when it is tagged or pushed'
@@ -66,14 +78,14 @@ runs:
         fi
         echo "endpoint=$endpoint" >> "$GITHUB_OUTPUT"
         echo "outputs=$outputs" >> "$GITHUB_OUTPUT"
-    # NOTE(krishan711): host network lets the docker-container builder reach registries on the runner's localhost, e.g. service containers
+    # NOTE(krishan711): builder options only apply to the docker-container builder, the shared BuildKit is configured where it runs
     - name: Set up Docker Buildx
       id: buildx
       if: env.CHECKS_ALREADY_PASSED != 'true' && env.BUILD_IMAGE_BUILDER == ''
       uses: docker/setup-buildx-action@v4
       with:
         driver: ${{ steps.resolve.outputs.endpoint != '' && 'remote' || 'docker-container' }}
-        driver-opts: ${{ steps.resolve.outputs.endpoint == '' && 'network=host' || '' }}
+        driver-opts: ${{ steps.resolve.outputs.endpoint == '' && inputs.driver-opts || '' }}
         endpoint: ${{ steps.resolve.outputs.endpoint }}
     # NOTE(krishan711): later builds in the job reuse this builder so they share its local state instead of starting a new one
     - name: Remember the builder
@@ -87,8 +99,8 @@ runs:
       if: env.CHECKS_ALREADY_PASSED != 'true'
       uses: docker/build-push-action@v7
       env:
-        DOCKER_BUILD_SUMMARY: 'false'
-        DOCKER_BUILD_RECORD_UPLOAD: 'false'
+        DOCKER_BUILD_SUMMARY: ${{ inputs.summary }}
+        DOCKER_BUILD_RECORD_UPLOAD: ${{ inputs.summary }}
       with:
         builder: ${{ env.BUILD_IMAGE_BUILDER }}
         context: ${{ inputs.context }}
@@ -100,7 +112,8 @@ runs:
         push: ${{ inputs.push != '' }}
         tags: ${{ inputs.push != '' && inputs.push || (steps.resolve.outputs.endpoint == '' && inputs.tag || '') }}
         cache-from: ${{ steps.resolve.outputs.endpoint == '' && format('type=gha,scope={0}', inputs.image) || '' }}
-        cache-to: ${{ steps.resolve.outputs.endpoint == '' && format('type=gha,mode=max,scope={0}', inputs.image) || '' }}
+        # NOTE(krishan711): a failed cache upload, e.g. when GitHub rate limits the cache, shouldn't fail a build that succeeded
+        cache-to: ${{ steps.resolve.outputs.endpoint == '' && format('type=gha,mode={0},scope={1},ignore-error=true', inputs.cache-mode, inputs.image) || '' }}
     - name: Pull image
       if: env.CHECKS_ALREADY_PASSED != 'true' && steps.resolve.outputs.registry-image != ''
       shell: bash

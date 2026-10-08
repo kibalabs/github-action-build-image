@@ -56,7 +56,7 @@ Set at most one of `tag` and `push`:
 The runner decides, through environment variables, so the same workflow works on any runner:
 
 - `BUILDKIT_ENDPOINT` set (e.g. `tcp://buildkit:1234`): builds on that BuildKit with the `remote` driver, which keeps its own cache. Images built with `tag` are pushed uncompressed to `BUILDKIT_REGISTRY` (e.g. `buildkit:5000`), a registry the BuildKit and the runner's docker daemon can both reach, and pulled from there instead of being loaded.
-- `BUILDKIT_ENDPOINT` not set (e.g. on GitHub's runners): builds in a `docker-container` builder on the host network (so it can push to registries on `localhost`), with the GitHub Actions cache (`type=gha,mode=max`) scoped to `image`.
+- `BUILDKIT_ENDPOINT` not set (e.g. on GitHub's runners): builds in a `docker-container` builder with the GitHub Actions cache (`type=gha`, `cache-mode` defaults to `max`) scoped to `image`. Pass `driver-opts: network=host` if the build pushes to a registry on the runner's `localhost`, e.g. a service container.
 
 Set them in the runner's environment (e.g. its `.env` file, or the runner container's environment), not in workflows, so jobs that fall back to GitHub's runners don't get them.
 
@@ -69,6 +69,8 @@ Every build in a job reuses the builder of the first one, so a later build start
 - Use the same `image` for builds of the same Dockerfile and build args, e.g. a check build of the `build` target and the deploy build of the full image. The full build includes the `build` stage, so what it writes covers both, and deploys on `main` fill the cache that pull requests read.
 - Use a different `image` when the Dockerfile or build args change, e.g. a worker built from `worker.Dockerfile` in the same context, or the same app built with different build args. Otherwise each build replaces the other's cache.
 
+GitHub keeps up to 10 GB of cache per repository and evicts the least recently used entries beyond that. If several large images keep evicting each other, use `cache-mode: min`, which only caches the layers of the final image.
+
 ## Inputs
 
 | Input | Default | Description |
@@ -80,6 +82,9 @@ Every build in a job reuses the builder of the first one, so a later build start
 | `build-args` | `''` | Build args, one per line. |
 | `tag` | `''` | Make the built image available to the local docker daemon under this tag. |
 | `push` | `''` | Tags to push the built image to, one per line. |
+| `cache-mode` | `max` | GitHub Actions cache mode without a shared BuildKit: `max` caches every stage, `min` only the final image's layers. |
+| `driver-opts` | `''` | Options for the `docker-container` builder used without a shared BuildKit, one per line, e.g. `network=host`. |
+| `summary` | `false` | Add the build summary to the job summary and upload the build record as an artifact. |
 
 ## Outputs
 
