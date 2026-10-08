@@ -66,10 +66,10 @@ Every build in a job reuses the builder of the first one, so a later build start
 
 `image` is the cache scope, so builds that share it share their cache. A GitHub Actions cache scope only keeps what the last build wrote to it:
 
-- Use the same `image` for builds of the same Dockerfile and build args, e.g. a check build of the `build` target and the deploy build of the full image. The full build includes the `build` stage, so what it writes covers both, and deploys on `main` fill the cache that pull requests read.
+- Use the same `image` for builds of the same Dockerfile and build args, e.g. a check build of the `build` target and the deploy build of the full image. With the default `cache-mode: max`, the full build includes the `build` stage, so what it writes covers both, and deploys on `main` fill the cache that pull requests read.
 - Use a different `image` when the Dockerfile or build args change, e.g. a worker built from `worker.Dockerfile` in the same context, or the same app built with different build args. Otherwise each build replaces the other's cache.
 
-GitHub keeps up to 10 GB of cache per repository and evicts the least recently used entries beyond that. If several large images keep evicting each other, use `cache-mode: min`, which only caches the layers of the final image.
+GitHub keeps up to 10 GB of cache per repository and evicts the least recently used entries beyond that. If several large images keep evicting each other, use `cache-mode: min`, which only caches the layers of the final image. A full build with `min` then no longer writes the layers of its earlier stages, so give builds of different targets their own `image`.
 
 ## Inputs
 

@@ -48,7 +48,7 @@ jobs:
       - name: Check the full image builds
         uses: ./
         with:
-          image: test
+          image: test-min
           context: ./tests/
           build-args: |
             MESSAGE=from-args
