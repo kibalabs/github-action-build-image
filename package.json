@@ -1,0 +1,12 @@
+{
+  "name": "@kibalabs/github-action-build-image",
+  "version": "1.0.0",
+  "description": "GitHub Action to build a docker image with a shared BuildKit when the runner has one, or the GitHub Actions cache otherwise",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kibalabs/github-action-build-image.git"
+  },
+  "bugs": "https://github.com/kibalabs/github-action-build-image/issues"
+}

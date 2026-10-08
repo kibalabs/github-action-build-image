@@ -1,0 +1,81 @@
+name: Build
+on:
+  pull_request:
+    branches: [main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-pull-request
+  cancel-in-progress: true
+jobs:
+  run-action:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: run-action
+            buildkit-endpoint: ''
+            buildkit-registry: ''
+          - name: run-action-buildkit
+            buildkit-endpoint: tcp://localhost:1234
+            buildkit-registry: localhost:5000
+    env:
+      BUILDKIT_ENDPOINT: ${{ matrix.buildkit-endpoint }}
+      BUILDKIT_REGISTRY: ${{ matrix.buildkit-registry }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start a registry
+        run: docker run --detach --name registry --publish 5000:5000 registry:3
+      - name: Start a shared BuildKit
+        if: matrix.buildkit-endpoint != ''
+        run: |
+          docker run --detach --name buildkitd --privileged --network host moby/buildkit:buildx-stable-1 --addr tcp://0.0.0.0:1234
+          until docker exec buildkitd buildctl --addr tcp://localhost:1234 debug workers >/dev/null 2>&1; do sleep 1; done
+      - name: Build the build stage with a local tag
+        uses: ./
+        with:
+          image: test
+          context: ./tests/
+          target: build
+          tag: test-build
+          build-args: |
+            MESSAGE=from-args
+          driver-opts: network=host
+      - name: Check the tagged image
+        run: test "$(docker run --rm test-build cat /message)" = from-args
+      - name: Check the full image builds
+        uses: ./
+        with:
+          image: test-min
+          context: ./tests/
+          build-args: |
+            MESSAGE=from-args
+          cache-mode: min
+      - name: Push the full image
+        id: push
+        uses: ./
+        with:
+          image: test
+          context: ./tests/
+          file: ./tests/Dockerfile
+          build-args: |
+            MESSAGE=from-args
+          push: localhost:5000/pushed:latest
+      - name: Check the pushed image
+        env:
+          IMAGE: localhost:5000/pushed@${{ steps.push.outputs.digest }}
+        run: |
+          docker pull --quiet "$IMAGE"
+          test "$(docker run --rm "$IMAGE" cat /message)" = "$(printf 'from-args\nfinal')"
+      - name: Skip when the checks already passed
+        uses: ./
+        env:
+          CHECKS_ALREADY_PASSED: 'true'
+        with:
+          image: test
+          context: ./tests/
+          tag: test-skipped
+      - name: Check nothing was built
+        run: '! docker image inspect test-skipped >/dev/null 2>&1'
