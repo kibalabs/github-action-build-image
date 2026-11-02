@@ -83,6 +83,8 @@ With `push`, the BuildKit pushes straight to the target registry with the runner
 
 A self-hosted runner without `BUILDKIT_ENDPOINT` still works, with the GitHub Actions cache, and the action adds a notice to the run saying so.
 
+To build with `platforms` for a platform other than the BuildKit machine's own, register QEMU on that machine once, e.g. `docker run --privileged --rm tonistiigi/binfmt --install arm64`, then restart BuildKit so it picks the new platform up.
+
 ### Choosing `image`
 
 `image` is the cache scope, so builds that share it share their cache. A GitHub Actions cache scope only keeps what the last build wrote to it:
@@ -103,6 +105,7 @@ GitHub keeps up to 10 GB of cache per repository and evicts the least recently u
 | `build-args` | `''` | Build args, one per line. |
 | `tag` | `''` | Make the built image available to the local docker daemon under this tag. |
 | `push` | `''` | Tags to push the built image to, one per line. |
+| `platforms` | the BuildKit machine's platform | Platforms to build for, comma separated, e.g. `linux/amd64,linux/arm64`. Use `push`, not `tag`, with more than one platform. |
 | `cache-mode` | `max` | GitHub Actions cache mode without a shared BuildKit: `max` caches every stage, `min` only the final image's layers. |
 | `driver-opts` | `''` | Options for the `docker-container` builder used without a shared BuildKit, one per line, e.g. `network=host`. |
 | `summary` | `false` | Add the build summary to the job summary and upload the build record as an artifact. |
