@@ -31,6 +31,10 @@ inputs:
     description: 'Tags to push the built image to, one per line. Log in to the registry first.'
     required: false
     default: ''
+  platforms:
+    description: 'Platforms to build for, comma separated, e.g. linux/amd64,linux/arm64. Defaults to the platform of the machine running BuildKit. Builds for other platforms need QEMU registered on that machine. Use push, not tag, with more than one platform.'
+    required: false
+    default: ''
   cache-mode:
     description: 'GitHub Actions cache mode when building without a shared BuildKit: max caches every stage, min only the layers of the final image (smaller, but intermediate stages rebuild)'
     required: false
@@ -58,10 +62,15 @@ runs:
         IMAGE: ${{ inputs.image }}
         TAG: ${{ inputs.tag }}
         PUSH: ${{ inputs.push }}
+        PLATFORMS: ${{ inputs.platforms }}
         RUNNER_ENVIRONMENT: ${{ runner.environment }}
       run: |
         if [[ -n "$TAG" && -n "$PUSH" ]]; then
           echo "::error::Set tag or push, not both"
+          exit 1
+        fi
+        if [[ -n "$TAG" && "$(echo "$PLATFORMS" | tr ',' '\n' | grep -c '[^[:space:]]')" -gt 1 ]]; then
+          echo "::error::Use push, not tag, with more than one platform: the local docker daemon can only hold one platform of an image"
           exit 1
         fi
         endpoint="${BUILDKIT_ENDPOINT:-}"
@@ -111,6 +120,7 @@ runs:
         file: ${{ inputs.file }}
         target: ${{ inputs.target }}
         build-args: ${{ inputs.build-args }}
+        platforms: ${{ inputs.platforms }}
         outputs: ${{ steps.resolve.outputs.outputs }}
         load: ${{ steps.resolve.outputs.endpoint == '' && inputs.tag != '' }}
         push: ${{ inputs.push != '' }}

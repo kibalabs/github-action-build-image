@@ -28,6 +28,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Start a registry
         run: docker run --detach --name registry --publish 5000:5000 registry:3
+      - name: Register QEMU
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
       - name: Start a shared BuildKit
         if: matrix.buildkit-endpoint != ''
         run: |
@@ -69,6 +73,29 @@ jobs:
         run: |
           docker pull --quiet "$IMAGE"
           test "$(docker run --rm "$IMAGE" cat /message)" = "$(printf 'from-args\nfinal')"
+      - name: Push a multi-platform image
+        uses: ./
+        with:
+          image: test
+          context: ./tests/
+          platforms: linux/amd64,linux/arm64
+          push: localhost:5000/multi:latest
+      - name: Check the multi-platform image
+        run: |
+          platforms="$(docker buildx imagetools inspect localhost:5000/multi:latest --format '{{json .Manifest}}' | jq -r '[.manifests[].platform | select(.architecture != "unknown") | "\(.os)/\(.architecture)"] | sort | join(",")')"
+          test "$platforms" = 'linux/amd64,linux/arm64'
+          test "$(docker run --rm --platform linux/arm64 localhost:5000/multi:latest uname -m)" = aarch64
+      - name: Reject tag with more than one platform
+        id: reject
+        continue-on-error: true
+        uses: ./
+        with:
+          image: test
+          context: ./tests/
+          platforms: linux/amd64,linux/arm64
+          tag: test-multi
+      - name: Check tag with more than one platform was rejected
+        run: test "${{ steps.reject.outcome }}" = failure
       - name: Skip when the checks already passed
         uses: ./
         env:
