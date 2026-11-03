@@ -69,7 +69,7 @@ runs:
           echo "::error::Set tag or push, not both"
           exit 1
         fi
-        if [[ -n "$TAG" && "$PLATFORMS" == *,* ]]; then
+        if [[ -n "$TAG" && "$(echo "$PLATFORMS" | tr ',' '\n' | grep -c '[^[:space:]]')" -gt 1 ]]; then
           echo "::error::Use push, not tag, with more than one platform: the local docker daemon can only hold one platform of an image"
           exit 1
         fi
