@@ -103,6 +103,7 @@ GitHub keeps up to 10 GB of cache per repository and evicts the least recently u
 | `file` | `Dockerfile` in the context | Path to the Dockerfile. |
 | `target` | `''` | Build target. |
 | `build-args` | `''` | Build args, one per line. |
+| `build-contexts` | `''` | Extra named build contexts, one per line as `name=path`, e.g. `api=./api`. The Dockerfile reads from one with `COPY --from=name`, so an image can use files outside its context without sending a bigger one. |
 | `tag` | `''` | Make the built image available to the local docker daemon under this tag. |
 | `push` | `''` | Tags to push the built image to, one per line. |
 | `platforms` | the BuildKit machine's platform | Platforms to build for, comma separated, e.g. `linux/amd64,linux/arm64`. Use `push`, not `tag`, with more than one platform. |
