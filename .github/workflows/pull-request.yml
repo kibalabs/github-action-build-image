@@ -49,6 +49,17 @@ jobs:
           driver-opts: network=host
       - name: Check the tagged image
         run: test "$(docker run --rm test-build cat /message)" = from-args
+      - name: Build with a named build context
+        uses: ./
+        with:
+          image: test-contexts
+          context: ./tests/
+          file: ./tests/Dockerfile.contexts
+          build-contexts: |
+            extra=./tests/extra
+          tag: test-contexts
+      - name: Check the named build context was used
+        run: test "$(docker run --rm test-contexts cat /message)" = from-context
       - name: Check the full image builds
         uses: ./
         with:

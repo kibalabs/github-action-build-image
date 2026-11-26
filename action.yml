@@ -23,6 +23,10 @@ inputs:
     description: 'Build args, one per line'
     required: false
     default: ''
+  build-contexts:
+    description: 'Extra named build contexts, one per line as name=path, e.g. api=./api. The Dockerfile reads from one with COPY --from=name, and only the files it copies are sent.'
+    required: false
+    default: ''
   tag:
     description: 'Make the built image available to the local docker daemon under this tag'
     required: false
@@ -119,6 +123,7 @@ runs:
         context: ${{ inputs.context }}
         file: ${{ inputs.file }}
         target: ${{ inputs.target }}
+        build-contexts: ${{ inputs.build-contexts }}
         build-args: ${{ inputs.build-args }}
         platforms: ${{ inputs.platforms }}
         outputs: ${{ steps.resolve.outputs.outputs }}
